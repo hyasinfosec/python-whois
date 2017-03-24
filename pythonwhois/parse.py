@@ -252,6 +252,8 @@ registrant_regexes = [
 	"Registrant:\n registrant_org: (?P<organization>.*)\n registrant_name: (?P<name>.*)\n registrant_email: (?P<email>.*)\n registrant_address: (?P<address>.*)\n registrant_city: (?P<city>.*)\n registrant_state: (?P<state>.*)\n registrant_zip: (?P<postalcode>.*)\n registrant_country: (?P<country>.*)\n registrant_phone: (?P<phone>.*)", # Bellnames
 	"Holder of domain name:\n(?P<name>[\S\s]+)\n(?P<street>.+)\n(?P<postalcode>[A-Z0-9-]+)\s+(?P<city>.+)\n(?P<country>.+)\nContractual Language", # nic.ch
 	"\n\n(?:Owner)?\s+: (?P<name>.*)\n(?:\s+: (?P<organization>.*)\n)?\s+: (?P<street>.*)\n\s+: (?P<city>.*)\n\s+: (?P<state>.*)\n\s+: (?P<country>.*)\n", # nic.io
+        "\n\n(?:Owner)?\s+: (?P<name>.*)\n(?:Owner)?(?:\s+: (?P<organization>.*)\n)(?:Owner)??\s+: (?P<street>.*)\n(?:Owner)?\s+: (?P<city>.*)\n(?:Owner)?\s+: (?P<state>.*)\n(?:Owner)?\s+: (?P<country>.*)\n", # nic.io format with multiple Owner:
+  "(?:Owner Name)?\s+: (?P<name>.*)\n(?:Owner OrgName)?(?:\s+: (?P<organization>.*)\n)(?:Owner Addr)??\s+: (?P<street>.*)\n(?:Owner Addr)?\s+: (?P<city>.*)\n(?:Owner Addr)?\s+: (?P<state>.*)\n(?:Owner Addr)?\s+: (?P<country>.*)\n", # nic.io format with Owner Name:
 	"Contact Information:\n\[Name\]\s*(?P<name>.*)\n\[Email\]\s*(?P<email>.*)\n\[Web Page\]\s*(?P<url>.*)\n\[Postal code\]\s*(?P<postalcode>.*)\n\[Postal Address\]\s*(?P<street1>.*)\n(?:\s+(?P<street2>.*)\n)?(?:\s+(?P<street3>.*)\n)?\[Phone\]\s*(?P<phone>.*)\n\[Fax\]\s*(?P<fax>.*)\n", # jprs.jp
 	"g\. \[Organization\]               (?P<organization>.+)\n", # .co.jp registrations at jprs.jp
 	"Registrant ID:(?P<handle>.*)\nRegistrant Name:(?P<name>.*)\n(?:Registrant Organization:(?P<organization>.*)\n)?Registrant Address1:(?P<street1>.*)\n(?:Registrant Address2:(?P<street2>.*)\n)?(?:Registrant Address3:(?P<street3>.*)\n)?Registrant City:(?P<city>.*)\n(?:Registrant State/Province:(?P<state>.*)\n)?(?:Registrant Postal Code:(?P<postalcode>.*)\n)?Registrant Country:(?P<country>.*)\nRegistrant Country Code:.*\nRegistrant Phone Number:(?P<phone>.*)\n(?:Registrant Facsimile Number:(?P<facsimile>.*)\n)?Registrant Email:(?P<email>.*)", # .US, .biz (NeuStar), .buzz, .moe (Interlink Co. Ltd.)
@@ -282,6 +284,7 @@ registrant_regexes = [
 	"owner:\s+(?P<name>.+)", # .br
 	"person:\s+(?P<name>.+)", # nic.ru (person)
 	"org:\s+(?P<organization>.+)", # nic.ru (organization)
+  "Registrant:\n\s+Name:[ ]*(?P<name>.+)\n", # .ca
 ]
 
 tech_contact_regexes = [
@@ -318,6 +321,7 @@ tech_contact_regexes = [
 	"Technical Contact Information:\n\n(?:Given name: (?P<firstname>.+)\n)?(?:Family name: (?P<lastname>.+)\n)?(?:Company name: (?P<organization>.+)\n)?Address: (?P<street>.+)\nCountry: (?P<country>.+)\nPhone: (?P<phone>.*)\nFax: (?P<fax>.*)\nEmail: (?P<email>.+)\n(?:Account Name: (?P<handle>.+)\n)?", # HKDNR (.hk)
 	"TECH ID:(?P<handle>.+)\nTECH Name:(?P<name>.*)\n(?:TECH Organization:(?P<organization>.*)\n)?TECH Street1:(?P<street1>.+?)\n(?:TECH Street2:(?P<street2>.+?)\n(?:TECH Street3:(?P<street3>.+?)\n)?)?TECH City:(?P<city>.+)\nTECH State:(?P<state>.*)\nTECH Postal Code:(?P<postalcode>.+)\nTECH Country:(?P<country>[A-Z]+)\nTECH Phone:(?P<phone>.*?)\nTECH Fax:(?P<fax>.*)\nTECH Email:(?P<email>.+)\n", # Realtime Register
 	"Technical Contact\n NIC Handle \(if known\)\.+:(?P<handle>.*)\n \(I\)ndividual \(R\)ole\.+:(?P<role>.*)\n Name \(Last, First\)\.+:(?P<name>.*)\n Organization Name\.+:(?P<organization>.*)\n Street Address\.+:(?P<street1>.*)\n City\.+: (?P<city>.*)\n State\.+: (?P<state>.*)\n Postal Code\.+:(?P<postalcode>.*)\n Country\.+:(?P<country>.*)\n Phone Number\.+:(?P<phone>.*)\n Fax Number\.+:(?P<fax>.*)\n E-Mailbox\.+:(?P<email>.*)", # .ai
+  "Technical contact:\n\s+Name:\s+(?P<name>.*)\n\s+Postal address:\s+(?P<street1>.+)\n\s+(?P<street2>.*)\n\s+Phone:\s+(?P<phone>.+)\n\s+Fax:\s+(?P<fax>.+)\n\s+Email:\s+(?P<email>.*)\n", #.ca
 ]
 
 admin_contact_regexes = [
@@ -345,6 +349,7 @@ admin_contact_regexes = [
 	"Administrative Contact Information:\n\n(?:Given name: (?P<firstname>.+)\n)?(?:Family name: (?P<lastname>.+)\n)?(?:Company name: (?P<organization>.+)\n)?Address: (?P<street>.+)\nCountry: (?P<country>.+)\nPhone: (?P<phone>.*)\nFax: (?P<fax>.*)\nEmail: (?P<email>.+)\n(?:Account Name: (?P<handle>.+)\n)?", # HKDNR (.hk)
 	"ADMIN ID:(?P<handle>.+)\nADMIN Name:(?P<name>.*)\n(?:ADMIN Organization:(?P<organization>.*)\n)?ADMIN Street1:(?P<street1>.+?)\n(?:ADMIN Street2:(?P<street2>.+?)\n(?:ADMIN Street3:(?P<street3>.+?)\n)?)?ADMIN City:(?P<city>.+)\nADMIN State:(?P<state>.*)\nADMIN Postal Code:(?P<postalcode>.+)\nADMIN Country:(?P<country>[A-Z]+)\nADMIN Phone:(?P<phone>.*?)\nADMIN Fax:(?P<fax>.*)\nADMIN Email:(?P<email>.+)\n", # Realtime Register
 	"Administrative Contact\n NIC Handle \(if known\)\.+:(?P<handle>.*)\n \(I\)ndividual \(R\)ole\.+:(?P<role>.*)\n Name \(Last, First\)\.+:(?P<name>.*)\n Organization Name\.+:(?P<organization>.*)\n Street Address\.+:(?P<street1>.*)\n City\.+: (?P<city>.*)\n State\.+: (?P<state>.*)\n Postal Code\.+:(?P<postalcode>.*)\n Country\.+:(?P<country>.*)\n Phone Number\.+:(?P<phone>.*)\n Fax Number\.+:(?P<fax>.*)\n E-Mailbox\.+:(?P<email>.*)", # .ai
+  "Administrative contact:\n\s+Name:\s+(?P<name>.*)\n\s+Postal address:\s+(?P<street1>.+)\n\s+(?P<street2>.*)\n\s+Phone:\s+(?P<phone>.+)\n\s+Fax:\s+(?P<fax>.+)\n\s+Email:\s+(?P<email>.*)\n", #.ca
 ]
 
 billing_contact_regexes = [
