@@ -157,6 +157,7 @@ grammar = {
 					 'Registration Service Provider: (?P<val>.+)',
 					 '\tName:\t\s(?P<val>.+)'],
 		'whois_server':		['Whois Server:\s?(?P<val>.+)',
+                                         'Registrar Whois Server:\s?(?P<val>.+)'],
 					 'Registrar Whois:\s?(?P<val>.+)'],
 		'nameservers':		['Name Server:[ ]*(?P<val>[^ ]+)',
 					 'Nameservers:[ ]*(?P<val>[^ ]+)',
