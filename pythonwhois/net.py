@@ -2,7 +2,9 @@ import socket, re, sys
 from codecs import encode, decode
 from . import shared
 
-def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=False, with_server_list=False, server_list=None):
+
+def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=False, with_server_list=False,
+									server_list=None, callback=None,timeout=None):
 	previous = previous or []
 	server_list = server_list or []
 	# Sometimes IANA simply won't give us the right root WHOIS server
@@ -21,7 +23,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 		".qpon": "whois.nic.qpon",
 		".sohu": "whois.gtld.knet.cn",
 		".tokyo": "whois.nic.tokyo",
-    ".yokohama": "whois.gmoregistry.net",
+		".yokohama": "whois.gmoregistry.net",
 		".trade": "whois.nic.trade",
 		".webcam": "whois.nic.webcam",
 		".xn--rhqv96g": "whois.nic.xn--rhqv96g",
@@ -31,7 +33,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 
 	if rfc3490:
 		if sys.version_info < (3, 0):
-			domain = encode( domain if type(domain) is unicode else decode(domain, "utf8"), "idna" )
+			domain = encode(domain if type(domain) is unicode else decode(domain, "utf8"), "idna")
 		else:
 			domain = encode(domain, "idna").decode("ascii")
 
@@ -44,18 +46,19 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				target_server = exc_serv
 				break
 		if is_exception == False:
-			target_server = get_root_server(domain)
+			target_server = get_root_server(domain,timeout=timeout,callback=callback)
 	else:
 		target_server = server
 	if target_server == "whois.jprs.jp":
-		request_domain = "%s/e" % domain # Suppress Japanese output
-	elif domain.endswith(".de") and ( target_server == "whois.denic.de" or target_server == "de.whois-servers.net" ):
-		request_domain = "-T dn,ace %s" % domain # regional specific stuff
+		request_domain = "%s/e" % domain  # Suppress Japanese output
+	elif domain.endswith(".de") and (target_server == "whois.denic.de" or target_server == "de.whois-servers.net"):
+		request_domain = "-T dn,ace %s" % domain  # regional specific stuff
 	elif target_server == "whois.verisign-grs.com":
-		request_domain = "=%s" % domain # Avoid partial matches
+		request_domain = "=%s" % domain  # Avoid partial matches
 	else:
 		request_domain = domain
-	response = whois_request(request_domain, target_server)
+
+	response = whois_request(request_domain, target_server, timeout=timeout, callback=callback)
 	if never_cut:
 		# If the caller has requested to 'never cut' responses, he will get the original response from the server (this is
 		# useful for callers that are only interested in the raw data). Otherwise, if the target is verisign-grs, we will
@@ -74,28 +77,30 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 	if never_cut == False:
 		new_list = [response] + previous
 	server_list.append(target_server)
-	
+
 	# Ignore redirects from registries who publish the registrar data themselves
-	if target_server not in ('whois.nic.xyz','whois.donuts.co','whois.pir.org'):
+	if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
 		for line in [x.strip() for x in response.splitlines()]:
-			#print(line)
-			#match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9]+\.[a-zA-Z0-9]+)", line, re.IGNORECASE)
-			#match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9\.-]+)", line, re.IGNORECASE)
+			# print(line)
+			# match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9]+\.[a-zA-Z0-9]+)", line, re.IGNORECASE)
+			# match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9\.-]+)", line, re.IGNORECASE)
 			match = re.match("(refer|whois server|referral url|whois server|registrar whois|registrar whois server):\s*(.+)", line, re.IGNORECASE)
 			if match is not None:
 				referal_server = match.group(2)
-				#print("Referral server: %s" % referal_server)
-				if referal_server != server and "://" not in referal_server: # We want to ignore anything non-WHOIS (eg. HTTP) for now.
+				# print("Referral server: %s" % referal_server)
+				if referal_server != server and "://" not in referal_server:  # We want to ignore anything non-WHOIS (eg. HTTP) for now.
 					# Referal to another WHOIS server...
-					return get_whois_raw(domain, referal_server, new_list, server_list=server_list, with_server_list=with_server_list)
-				
+					return get_whois_raw(domain, referal_server, new_list, server_list=server_list,
+															 with_server_list=with_server_list, timeout=timeout, callback=callback)
+
 	if with_server_list:
 		return (new_list, server_list)
 	else:
 		return new_list
 
-def get_root_server(domain):
-	data = whois_request(domain, "whois.iana.org")
+
+def get_root_server(domain,timeout=None, callback=None):
+	data = whois_request(domain, "whois.iana.org", timeout=timeout, callback=callback)
 	for line in [x.strip() for x in data.splitlines()]:
 		match = re.match("refer:\s*([^\s]+)", line)
 		if match is None:
@@ -103,15 +108,32 @@ def get_root_server(domain):
 		return match.group(1)
 	raise shared.WhoisException("No root WHOIS server found for domain.")
 
-def whois_request(domain, server, port=43):
+def whois_request(domain, server, port=43, timeout=None, callback=None):
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	#print("Connecting to %s" % server)
+	if callback is not None:
+		callback(server)
+	if timeout is not None:
+		sock.settimeout(timeout)
+	else:
+		raise ValueError("Invalid timeout")
+	# print("Connecting to %s" % server,"port",port,"timeout",timeout)
 	sock.connect((server, port))
 	sock.send(("%s\r\n" % domain).encode("utf-8"))
 	buff = b""
 	while True:
-		data = sock.recv(1024)
-		if len(data) == 0:
-			break
-		buff += data
+		if timeout is None:
+			data = sock.recv(1024)
+			if len(data) == 0:
+				break
+			buff += data
+		else:
+			import select
+			ready = select.select([sock], [], [], timeout)
+			if ready[0]:
+				data = sock.recv(1024)
+				if len(data) == 0:
+					break
+				buff += data
+			else:
+				raise Exception('recv timeout:%s' % server)
 	return buff.decode("utf-8", "replace")
