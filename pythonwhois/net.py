@@ -36,7 +36,6 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 			domain = encode(domain if type(domain) is unicode else decode(domain, "utf8"), "idna")
 		else:
 			domain = encode(domain, "idna").decode("ascii")
-
 	if len(previous) == 0 and server == "":
 		# Root query
 		is_exception = False
@@ -46,7 +45,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				target_server = exc_serv
 				break
 		if is_exception == False:
-			target_server  = get_root_server(domain,timeout=timeout,callback=callback)
+			target_server = get_root_server(domain,timeout=timeout,callback=callback)
 	else:
 		target_server = server
 	if target_server == "whois.jprs.jp":
@@ -57,8 +56,6 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 		request_domain = "=%s" % domain  # Avoid partial matches
 	else:
 		request_domain = domain
-
-
 	response = whois_request(request_domain, target_server, timeout=timeout, callback=callback)
 	if never_cut:
 		# If the caller has requested to 'never cut' responses, he will get the original response from the server (this is
@@ -68,8 +65,6 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 		# when `never_cut` is set to False, any verisign-grs responses in the raw data will be missing header, footer, and
 		# alternative domain options (this is handled a few lines below, after the verisign-grs processing).
 		new_list = [response] + previous
-
-
 	if target_server == "whois.verisign-grs.com":
 		# VeriSign is a little... special. As it may return multiple full records and there's no way to do an exact query,
 		# we need to actually find the correct record in the list.
@@ -79,13 +74,8 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				break
 	if never_cut == False:
 		new_list = [response] + previous
-
-
 	server_list.append(target_server)
-
 	# Ignore redirects from registries who publish the registrar data themselves
-
-
 	if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
 		if response is None:
 			return (new_list,server_list)
