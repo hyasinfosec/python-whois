@@ -46,7 +46,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				target_server = exc_serv
 				break
 		if is_exception == False:
-			target_server = get_root_server(domain,timeout=timeout,callback=callback)
+			target_server  = get_root_server(domain,timeout=timeout,callback=callback)
 	else:
 		target_server = server
 	if target_server == "whois.jprs.jp":
@@ -58,6 +58,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 	else:
 		request_domain = domain
 
+
 	response = whois_request(request_domain, target_server, timeout=timeout, callback=callback)
 	if never_cut:
 		# If the caller has requested to 'never cut' responses, he will get the original response from the server (this is
@@ -67,6 +68,8 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 		# when `never_cut` is set to False, any verisign-grs responses in the raw data will be missing header, footer, and
 		# alternative domain options (this is handled a few lines below, after the verisign-grs processing).
 		new_list = [response] + previous
+
+
 	if target_server == "whois.verisign-grs.com":
 		# VeriSign is a little... special. As it may return multiple full records and there's no way to do an exact query,
 		# we need to actually find the correct record in the list.
@@ -76,10 +79,16 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				break
 	if never_cut == False:
 		new_list = [response] + previous
+
+
 	server_list.append(target_server)
 
 	# Ignore redirects from registries who publish the registrar data themselves
+
+
 	if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
+		if response is None:
+			return (new_list,server_list)
 		for line in [x.strip() for x in response.splitlines()]:
 			# print(line)
 			# match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9]+\.[a-zA-Z0-9]+)", line, re.IGNORECASE)
@@ -109,6 +118,8 @@ def get_root_server(domain,timeout=None, callback=None):
 	raise shared.WhoisException("No root WHOIS server found for domain.")
 
 def whois_request(domain, server, port=43, timeout=None, callback=None):
+	if timeout is None:
+		timeout = 30
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	if callback is not None:
 		callback(server)
@@ -116,9 +127,19 @@ def whois_request(domain, server, port=43, timeout=None, callback=None):
 		sock.settimeout(timeout)
 	else:
 		raise ValueError("Invalid timeout")
-	# print("Connecting to %s" % server,"port",port,"timeout",timeout)
-	sock.connect((server, port))
-	sock.send(("%s\r\n" % domain).encode("utf-8"))
+	#print("Connecting to %s" % server,"port",port,"timeout",timeout)
+	import errno
+	from socket import error as socket_error
+
+	try:
+		sock.connect((server, port))
+		sock.send(("%s\r\n" % domain).encode("utf-8"))
+	except socket.timeout:
+		return ''
+	except socket_error as serr:
+    		if serr.errno != errno.ECONNREFUSED:
+        	# Not the error we are looking for, re-raise
+        		raise serr
 	buff = b""
 	while True:
 		if timeout is None:
