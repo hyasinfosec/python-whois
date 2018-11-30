@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser(description="Retrieves and parses WHOIS data fo
 parser.add_argument("-r", "--raw", action="store_true", help="Outputs raw WHOIS data and doesn't attempt to parse it. Segments are separated by a double-dash (--).")
 parser.add_argument("-j", "--json", action="store_true", help="Outputs structured WHOIS data in JSON format, according to the pythonwhois API.")
 parser.add_argument("-f", "--file", action="store", help="Loads and parses raw double-dash-delimited WHOIS data from a specified file, instead of contacting a WHOIS server.", default=None)
+parser.add_argument("-t", "--timeout", action="store", help="Specify connection timeout ", default=10)
 parser.add_argument("domain", nargs=1)
 args = parser.parse_args()
 
@@ -19,8 +20,13 @@ def json_fallback(obj):
 	else:
 		return obj
 
+if args.timeout:
+	print("TimeOut: ", args.timeout)
+	data, server_list = pythonwhois.net.get_whois_raw(args.domain[0], with_server_list=True, timeout=int(args.timeout))
+
 if args.file is None:
 	data, server_list = pythonwhois.net.get_whois_raw(args.domain[0], with_server_list=True)
+
 else:
 	server_list = []
 	with open(args.file, "r") as f:
