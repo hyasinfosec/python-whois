@@ -5,6 +5,7 @@ from . import shared
 
 def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=False, with_server_list=False,
 									server_list=None, callback=None,timeout=None):
+        root_data = []
 	previous = previous or []
 	server_list = server_list or []
 	# Sometimes IANA simply won't give us the right root WHOIS server
@@ -45,7 +46,8 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				target_server = exc_serv
 				break
 		if is_exception == False:
-			target_server = get_root_server(domain,timeout=timeout,callback=callback)
+			target_server,  rd  = get_root_server(domain,timeout=timeout,callback=callback)
+			root_data.append(rd)
 	else:
 		target_server = server
 	if target_server == "whois.jprs.jp":
@@ -64,7 +66,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 		# parsing code will only touch the information relevant to the requested domain. The side-effect of this is that
 		# when `never_cut` is set to False, any verisign-grs responses in the raw data will be missing header, footer, and
 		# alternative domain options (this is handled a few lines below, after the verisign-grs processing).
-		new_list = [response] + previous
+		new_list = [response] + previous + root_data
 	if target_server == "whois.verisign-grs.com":
 		# VeriSign is a little... special. As it may return multiple full records and there's no way to do an exact query,
 		# we need to actually find the correct record in the list.
@@ -73,7 +75,7 @@ def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=Fals
 				response = record
 				break
 	if never_cut == False:
-		new_list = [response] + previous
+		new_list = [response] + previous + root_data
 	server_list.append(target_server)
 	# Ignore redirects from registries who publish the registrar data themselves
 	if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
@@ -104,7 +106,7 @@ def get_root_server(domain,timeout=None, callback=None):
 		match = re.match("refer:\s*([^\s]+)", line)
 		if match is None:
 			continue
-		return match.group(1)
+		return match.group(1), data
 	raise shared.WhoisException("No root WHOIS server found for domain.")
 
 def whois_request(domain, server, port=43, timeout=None, callback=None):
