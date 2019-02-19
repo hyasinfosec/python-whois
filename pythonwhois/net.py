@@ -5,7 +5,7 @@ from . import shared
 
 def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=False, with_server_list=False,
 									server_list=None, callback=None,timeout=None):
-        root_data = []
+	root_data = []
 	previous = previous or []
 	server_list = server_list or []
 	# Sometimes IANA simply won't give us the right root WHOIS server
