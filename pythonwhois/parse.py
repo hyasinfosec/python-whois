@@ -286,7 +286,7 @@ registrant_regexes = [
 	"person:\s+(?P<name>.+)", # nic.ru (person)
 	"org:\s+(?P<organization>.+)", # nic.ru (organization)
   "Registrant:\n\s+Name:[ ]*(?P<name>.+)\n", # .ca
-  "Registrant Organization: (?P<organization>.+).+\n.*Registrant State/Province: (?P<state>.+)\n.*Registrant Country: (?P<country>.+)\n"
+  "Registrant Organization: (?P<organization>.+)\n.*Registrant State/Province: (?P<state>.+)\n.*Registrant Country: (?P<country>.+)\n"
 ]
 
 tech_contact_regexes = [
