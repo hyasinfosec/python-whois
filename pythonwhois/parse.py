@@ -286,6 +286,7 @@ registrant_regexes = [
 	"person:\s+(?P<name>.+)", # nic.ru (person)
 	"org:\s+(?P<organization>.+)", # nic.ru (organization)
   "Registrant:\n\s+Name:[ ]*(?P<name>.+)\n", # .ca
+  "Registrant Organization: (?P<organization>.+).+\n.*Registrant State/Province: (?P<state>.+)\n.*Registrant Country: (?P<country>.+)\n"
 ]
 
 tech_contact_regexes = [
@@ -478,7 +479,7 @@ for key in ('id', 'status', 'creation_date', 'expiration_date', 'updated_date', 
 
 for key in ('registrant', 'tech', 'admin', 'billing'):
 	nic_contact_references[key] = precompile_regexes(nic_contact_references[key])
-	
+
 grammar["_dateformats"] = precompile_regexes(grammar["_dateformats"], re.IGNORECASE)
 
 registrant_regexes = precompile_regexes(registrant_regexes)
@@ -683,7 +684,7 @@ def parse_raw_whois(raw_data, normalized=None, never_query_handles=True, handle_
 				known_emails.append(data["contacts"][contact]["email"])
 			except KeyError as e:
 				pass # No e-mail recorded for this contact...
-		
+
 	# Remove e-mail addresses if they are already listed for any of the contacts
 	try:
 		data['emails'] = [email for email in data["emails"] if email not in known_emails]
@@ -730,15 +731,15 @@ def normalize_data(data, normalized):
 				for country, source in (("united states", states_us), ("australia", states_au), ("canada", states_ca)):
 					if country in contact["country"].lower() and contact["state"] in source:
 						contact["state"] = source[contact["state"]]
-					
+
 
 			# Some registries (eg. Instra via .ai) may duplicate the name of a person into the organization field
 			if 'name' in contact and 'organization' in contact and contact['name'] == contact['organization']:
 				del contact['organization']
-			
+
 			new_organization_lines = []
 			new_name_lines = []
-			
+
 			for key in list(contact.keys()):
 				# First deduplication pass
 				if is_string(contact[key]):
@@ -746,17 +747,17 @@ def normalize_data(data, normalized):
 						contact[key] = deduplicate(contact[key], fuzzy=True)
 					else:
 						contact[key] = deduplicate(contact[key])
-			
+
 			if 'name' in contact:
 				name_lines = [x.strip() for x in contact["name"].splitlines()]
 			else:
 				name_lines = []
-							
+
 			if 'organization' in contact:
 				organization_lines = [x.strip() for x in contact["organization"].splitlines()]
 			else:
 				organization_lines = []
-				
+
 			# Move names that look like organizations, to the organization field
 			for i, line in enumerate(name_lines):
 				if 'type' in contact and contact['type'].lower() == "person":
@@ -764,16 +765,16 @@ def normalize_data(data, normalized):
 					is_organization = is_organization_name(line)
 				else:
 					is_organization = is_organization_name(line) or is_fuzzy_duplicate(line, organization_lines)
-				
+
 				if is_organization:
 					if "," in line:
 						name_words = re.split(name_separators, line)
 						if is_full_incorporation_form(name_words[0]):
 							line = reverse_name_comma(line)
-					
+
 					new_organization_lines.append(line)
 					del name_lines[i]
-				
+
 			# ... and move organizations that look like names, to the name field.
 			for i, line in enumerate(organization_lines):
 				is_name = is_person_name(line)
@@ -782,27 +783,27 @@ def normalize_data(data, normalized):
 				if is_name == True and is_organization == False:
 					new_name_lines.append(line)
 					del organization_lines[i]
-				
+
 			combined_name_lines = name_lines + new_name_lines
 			combined_organization_lines = new_organization_lines + organization_lines
-			
+
 			if len(combined_name_lines) > 0:
 				contact["name"] = "\n".join(combined_name_lines)
 			elif 'name' in contact:
 				del contact["name"]
-				
+
 			if len(combined_organization_lines) > 0:
 				contact["organization"] = "\n".join(combined_organization_lines)
 			elif 'organization' in contact:
 				del contact["organization"]
-				
+
 			new_roles = []
-				
+
 			if 'name' in contact:
 				# Check whether the name is reversed; first name last, last name first.
 				names = contact['name'].splitlines()
 				unswapped_names = []
-				
+
 				for name in names:
 					if "," in name:
 						name = reverse_name_comma(name)
@@ -814,46 +815,46 @@ def normalize_data(data, normalized):
 						if len(name_words) > 1 and is_first_name(name_words[-1]) and not is_first_name(name_words[0]):
 							# The last 'word' was in the common first names, but the first one was not. Likely swapped around.
 							name = reverse_name(name)
-							
+
 					if is_role(name):
 						new_roles.append(name)
 					else:
 						unswapped_names.append(name)
-					
+
 				if len(unswapped_names) > 0:
 					contact['name'] = "\n".join(unswapped_names)
 				else:
 					del contact['name']
-				
+
 			if 'organization' in contact:
 				organizations = contact['organization'].splitlines()
 				new_organizations = []
-				
+
 				for organization in organizations:
 					if is_role(organization):
 						new_roles.append(organization)
 					else:
 						new_organizations.append(organization)
-						
+
 				if len(new_organizations) > 0:
 					contact['organization'] = "\n".join(new_organizations)
 				else:
 					del contact['organization']
-					
+
 			if 'street' in contact:
 				streets = contact['street'].splitlines()
-				
+
 				if is_role(streets[0]):
 					new_roles.append(streets[0])
 					streets = streets[1:]
-					
+
 				contact['street'] = "\n".join(streets)
-				
+
 			if 'role' in contact:
 				existing_roles = contact['role'].splitlines()
 			else:
 				existing_roles = []
-				
+
 			if len(new_roles) > 0:
 				contact['role'] = "\n".join(new_roles + existing_roles)
 
@@ -868,10 +869,10 @@ def normalize_data(data, normalized):
 
 						contact["organization"] = "\n".join([lines[0]] + organizations)
 						contact["street"] = "\n".join(lines[1:])
-							
+
 			if 'organization' in contact:
 				contact['organization'] = re.sub(comma_without_space, r", \1", contact['organization'])
-				
+
 			for key in ("email",):
 				if key in contact and contact[key] is not None and (normalized == True or key in normalized):
 					if is_string(contact[key]):
@@ -884,7 +885,7 @@ def normalize_data(data, normalized):
 					for phrase in ("GPO Box",):
 						regex = known_abbreviations[phrase]
 						contact[key] = re.sub(regex, phrase, contact[key])
-					
+
 			for key in ("name", "street"):
 				if key in contact and contact[key] is not None and (normalized == True or key in normalized):
 					contact[key] = normalize_name(contact[key], abbreviation_threshold=3)
@@ -903,16 +904,16 @@ def normalize_data(data, normalized):
 
 					contact[key] = contact[key].strip(", ")
 					contact[key] = re.sub(duplicate_spaces, " ", contact[key])
-					
+
 					# Second deduplication pass
 					if key in ('organization', 'name'):
 						contact[key] = deduplicate(contact[key], fuzzy=True)
 					else:
 						contact[key] = deduplicate(contact[key])
-					
+
 					if contact[key] == "-" or contact[key].lower() == "n/a" or contact[key].lower() == "null":
 						del contact[key]
-		
+
 		if contact is not None and len(contact) == 0:
 			# We don't have any actual data.
 			data['contacts'][contact_type] = None
@@ -921,38 +922,38 @@ def normalize_data(data, normalized):
 def deduplicate(value, fuzzy=False):
 	lines = value.splitlines()
 	unique_lines = []
-	
+
 	# Filter out obviously identical lines first.
 	for i, line in enumerate(lines):
 		if line not in unique_lines:
 			unique_lines.append(line)
-	
+
 	if fuzzy == True:
 		# Do a fuzzy comparison to the shortest line for the remainder...
 		duplicates = get_fuzzy_duplicates(unique_lines)
-		
+
 		if len(duplicates) > 1:
 			longest_duplicate = max(duplicates, key=len)
 			duplicates.remove(longest_duplicate)
-			
+
 			for duplicate in duplicates:
 				unique_lines.remove(duplicate)
-	
+
 	return "\n".join(unique_lines)
-	
+
 def is_fuzzy_duplicate(line, other_lines):
 	if len(other_lines) == 0:
 		return False
-	
+
 	duplicates = get_fuzzy_duplicates([line] + other_lines)
 	return (len(duplicates) > 1 and line in duplicates)
-	
+
 def get_fuzzy_duplicates(lines):
 	shortest = min(lines, key=len)
 	words = re.split(name_separators, shortest)
 
 	return [line for line in lines if not fuzzy_word_match(line, words)]
-	
+
 def fuzzy_word_match(line, words):
 	unique = False
 	for word in words:
@@ -964,24 +965,24 @@ def fuzzy_word_match(line, words):
 def is_organization_name(name, include_countries=True):
 	if is_incorporation_form(name):
 		return True
-		
+
 	# Special (common) cases
 	if name.lower() in ('neustar',):
 		return True
-		
+
 	if include_countries == True:
 		if is_country(name):
 			return True
-		
+
 	return False
 
 def is_person_name(name):
 	name_segments = re.split(name_separators, name)
-					
+
 	for segment in name_segments:
 		if is_first_name(segment):
 			return True
-		
+
 	return False
 
 def is_first_name(name):
@@ -999,13 +1000,13 @@ def is_incorporation_form(word):
 
 def is_full_incorporation_form(word):
 	return match_regexes(word, organization_regexes)
-	
+
 def is_abbreviated_incorporation_form(word):
 	return match_regexes(word, abbreviated_organization_regexes)
 
 def is_role(line):
-	return match_regexes(line, role_regexes) 
-	
+	return match_regexes(line, role_regexes)
+
 def is_country(word):
 	return match_regexes(word, country_regexes)
 
@@ -1021,7 +1022,7 @@ def has_incorrect_known_abbreviation(line):
 			if re.search(regex, word):
 				if sub not in word:
 					return True
-	
+
 	return False
 
 # TODO: Cache/memoize lookup results?
@@ -1032,16 +1033,16 @@ def match_regexes(string, regexes):
 	for regex in regexes:
 		if re.search(regex, string):
 			return True
-		
+
 	return False
 
 def match_regexes_dict(string, regexes):
 	for sub, regex in regexes.items():
 		if re.search(regex, string):
 			return sub
-		
+
 	raise Error("No matching values.")
-	
+
 def capitalize_words(line):
 	return ' '.join([word.capitalize() for word in line.split(" ")])
 
@@ -1091,12 +1092,12 @@ def normalize_name(value, abbreviation_threshold=4, length_threshold=8, lowercas
 					# Last word
 					normalized_words.append(normalize_word(words[-1], abbreviation_threshold=abbreviation_threshold, lowercase_domains=lowercase_domains))
 				line = " ".join(normalized_words)
-		
+
 		# Fix country capitalization
 		for country in country_names:
 			if has_country(line, country):
 				line = re.sub(re.compile(country, re.IGNORECASE), capitalize_words(country), line)
-				
+
 		normalized_lines.append(line)
 	return "\n".join(normalized_lines)
 
