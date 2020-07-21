@@ -1,152 +1,166 @@
-import socket, re, sys
+import errno
+import re
+import select
+import socket
+import sys
 from codecs import encode, decode
+from socket import error as socket_error
+
 from . import shared
 
 
 def get_whois_raw(domain, server="", previous=None, rfc3490=True, never_cut=False, with_server_list=False,
-									server_list=None, callback=None,timeout=None):
-	root_data = []
-	previous = previous or []
-	server_list = server_list or []
-	# Sometimes IANA simply won't give us the right root WHOIS server
-	exceptions = {
-		".ac.uk": "whois.ja.net",
-		".ps": "whois.pnina.ps",
-		".buzz": "whois.nic.buzz",
-		".moe": "whois.nic.moe",
-		".arpa": "whois.iana.org",
-		".bid": "whois.nic.bid",
-		".int": "whois.iana.org",
-		".kred": "whois.nic.kred",
-		".nagoya": "whois.gmoregistry.net",
-		".nyc": "whois.nic.nyc",
-		".okinawa": "whois.gmoregistry.net",
-		".qpon": "whois.nic.qpon",
-		".sohu": "whois.gtld.knet.cn",
-		".tokyo": "whois.nic.tokyo",
-		".yokohama": "whois.gmoregistry.net",
-		".trade": "whois.nic.trade",
-		".webcam": "whois.nic.webcam",
-		".xn--rhqv96g": "whois.nic.xn--rhqv96g",
-		# The following is a bit hacky, but IANA won't return the right answer for example.com because it's a direct registration.
-		"example.com": "whois.verisign-grs.com"
-	}
+                                    server_list=None, callback=None,timeout=None):
+    root_data = []
+    previous = previous or []
+    server_list = server_list or []
+    # Sometimes IANA simply won't give us the right root WHOIS server
+    exceptions = {
+        ".ac.uk": "whois.ja.net",
+        ".ps": "whois.pnina.ps",
+        ".buzz": "whois.nic.buzz",
+        ".moe": "whois.nic.moe",
+        ".arpa": "whois.iana.org",
+        ".bid": "whois.nic.bid",
+        ".int": "whois.iana.org",
+        ".kred": "whois.nic.kred",
+        ".nagoya": "whois.gmoregistry.net",
+        ".nyc": "whois.nic.nyc",
+        ".okinawa": "whois.gmoregistry.net",
+        ".qpon": "whois.nic.qpon",
+        ".sohu": "whois.gtld.knet.cn",
+        ".tokyo": "whois.nic.tokyo",
+        ".yokohama": "whois.gmoregistry.net",
+        ".trade": "whois.nic.trade",
+        ".webcam": "whois.nic.webcam",
+        ".xn--rhqv96g": "whois.nic.xn--rhqv96g",
+        # The following is a bit hacky, but IANA won't return the right answer for example.com because it's a direct registration.
+        "example.com": "whois.verisign-grs.com"
+    }
 
-	if rfc3490:
-		if sys.version_info < (3, 0):
-			domain = encode(domain if type(domain) is unicode else decode(domain, "utf8"), "idna")
-		else:
-			domain = encode(domain, "idna").decode("ascii")
-	if len(previous) == 0 and server == "":
-		# Root query
-		is_exception = False
-		for exception, exc_serv in exceptions.items():
-			if domain.endswith(exception):
-				is_exception = True
-				target_server = exc_serv
-				break
-		if is_exception == False:
-			target_server,  rd  = get_root_server(domain,timeout=timeout,callback=callback)
-			root_data.append(rd)
-	else:
-		target_server = server
-	if target_server == "whois.jprs.jp":
-		request_domain = "%s/e" % domain  # Suppress Japanese output
-	elif domain.endswith(".de") and (target_server == "whois.denic.de" or target_server == "de.whois-servers.net"):
-		request_domain = "-T dn,ace %s" % domain  # regional specific stuff
-	elif target_server == "whois.verisign-grs.com":
-		request_domain = "=%s" % domain  # Avoid partial matches
-	else:
-		request_domain = domain
-	response = whois_request(request_domain, target_server, timeout=timeout, callback=callback)
-	if never_cut:
-		# If the caller has requested to 'never cut' responses, he will get the original response from the server (this is
-		# useful for callers that are only interested in the raw data). Otherwise, if the target is verisign-grs, we will
-		# select the data relevant to the requested domain, and discard the rest, so that in a multiple-option response the
-		# parsing code will only touch the information relevant to the requested domain. The side-effect of this is that
-		# when `never_cut` is set to False, any verisign-grs responses in the raw data will be missing header, footer, and
-		# alternative domain options (this is handled a few lines below, after the verisign-grs processing).
-		new_list = [response] + previous + root_data
-	if target_server == "whois.verisign-grs.com":
-		# VeriSign is a little... special. As it may return multiple full records and there's no way to do an exact query,
-		# we need to actually find the correct record in the list.
-		for record in response.split("\n\n"):
-			if re.search("Domain Name: %s\n" % domain.upper(), record):
-				response = record
-				break
-	if never_cut == False:
-		new_list = [response] + previous + root_data
-	server_list.append(target_server)
-	# Ignore redirects from registries who publish the registrar data themselves
-	if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
-		if response is None:
-			return (new_list,server_list)
-		for line in [x.strip() for x in response.splitlines()]:
-			# print(line)
-			# match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9]+\.[a-zA-Z0-9]+)", line, re.IGNORECASE)
-			# match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9\.-]+)", line, re.IGNORECASE)
-			match = re.match("(refer|whois server|referral url|whois server|registrar whois|registrar whois server):\s*(.+)", line, re.IGNORECASE)
-			if match is not None:
-				referal_server = match.group(2)
-				# print("Referral server: %s" % referal_server)
-				if referal_server != server and "://" not in referal_server:  # We want to ignore anything non-WHOIS (eg. HTTP) for now.
-					# Referal to another WHOIS server...
-					return get_whois_raw(domain, referal_server, new_list, server_list=server_list,
-															 with_server_list=with_server_list, timeout=timeout, callback=callback)
+    if rfc3490:
+        if sys.version_info < (3, 0):
+            domain = encode(domain if type(domain) is unicode else decode(domain, "utf8"), "idna")
+        else:
+            domain = encode(domain, "idna").decode("ascii")
+    if len(previous) == 0 and server == "":
+        # Root query
+        is_exception = False
+        for exception, exc_serv in exceptions.items():
+            if domain.endswith(exception):
+                is_exception = True
+                target_server = exc_serv
+                break
+        if is_exception == False:
+            target_server,  rd  = get_root_server(domain,timeout=timeout,callback=callback)
+            root_data.append(rd)
+    else:
+        target_server = server
+    if target_server == "whois.jprs.jp":
+        request_domain = "%s/e" % domain  # Suppress Japanese output
+    elif domain.endswith(".de") and (target_server == "whois.denic.de" or target_server == "de.whois-servers.net"):
+        request_domain = "-T dn,ace %s" % domain  # regional specific stuff
+    elif target_server == "whois.verisign-grs.com":
+        request_domain = "=%s" % domain  # Avoid partial matches
+    else:
+        request_domain = domain
 
-	if with_server_list:
-		return (new_list, server_list)
-	else:
-		return new_list
+    try:
+        response = whois_request(request_domain, target_server, timeout=timeout, callback=callback)
+    except shared.TimeoutException:
+        new_list = previous + root_data
+        if with_server_list:
+            return (new_list, server_list)
+        else:
+            return new_list
+    
+    if never_cut:
+        # If the caller has requested to 'never cut' responses, he will get the original response from the server (this is
+        # useful for callers that are only interested in the raw data). Otherwise, if the target is verisign-grs, we will
+        # select the data relevant to the requested domain, and discard the rest, so that in a multiple-option response the
+        # parsing code will only touch the information relevant to the requested domain. The side-effect of this is that
+        # when `never_cut` is set to False, any verisign-grs responses in the raw data will be missing header, footer, and
+        # alternative domain options (this is handled a few lines below, after the verisign-grs processing).
+        new_list = [response] + previous + root_data
+    if target_server == "whois.verisign-grs.com":
+        # VeriSign is a little... special. As it may return multiple full records and there's no way to do an exact query,
+        # we need to actually find the correct record in the list.
+        for record in response.split("\n\n"):
+            if re.search("Domain Name: %s\n" % domain.upper(), record):
+                response = record
+                break
+    if never_cut == False:
+        new_list = [response] + previous + root_data
+    server_list.append(target_server)
+    # Ignore redirects from registries who publish the registrar data themselves
+    if target_server not in ('whois.nic.xyz', 'whois.donuts.co', 'whois.pir.org'):
+        if response is None:
+            return (new_list,server_list)
+        for line in [x.strip() for x in response.splitlines()]:
+            # print(line)
+            # match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9]+\.[a-zA-Z0-9]+)", line, re.IGNORECASE)
+            # match = re.match("(refer|whois server|referral url|whois server|registrar whois):\s*([a-zA-Z0-9\.-]+)", line, re.IGNORECASE)
+            match = re.match("(refer|whois server|referral url|whois server|registrar whois|registrar whois server):\s*(.+)", line, re.IGNORECASE)
+            if match is not None:
+                referal_server = match.group(2)
+                # print("Referral server: %s" % referal_server)
+                if referal_server != server and "://" not in referal_server:  # We want to ignore anything non-WHOIS (eg. HTTP) for now.
+                    # Referal to another WHOIS server...
+                    return get_whois_raw(domain, referal_server, new_list, server_list=server_list,
+                                                             with_server_list=with_server_list, timeout=timeout, callback=callback)
+
+    if with_server_list:
+        return (new_list, server_list)
+    else:
+        return new_list
 
 
-def get_root_server(domain,timeout=None, callback=None):
-	data = whois_request(domain, "whois.iana.org", timeout=timeout, callback=callback)
-	for line in [x.strip() for x in data.splitlines()]:
-		match = re.match("refer:\s*([^\s]+)", line)
-		if match is None:
-			continue
-		return match.group(1), data
-	raise shared.WhoisException("No root WHOIS server found for domain.")
+def get_root_server(domain, timeout=None, callback=None):
+    data = whois_request(domain, "whois.iana.org", timeout=timeout, callback=callback)
+    for line in [x.strip() for x in data.splitlines()]:
+        match = re.match("refer:\s*([^\s]+)", line)
+        if match is None:
+            continue
+        return match.group(1), data
+    raise shared.WhoisException("No root WHOIS server found for domain.")
 
 def whois_request(domain, server, port=43, timeout=None, callback=None):
-	if timeout is None:
-		timeout = 30
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	if callback is not None:
-		callback(server)
-	if timeout is not None:
-		sock.settimeout(timeout)
-	else:
-		raise ValueError("Invalid timeout")
-	#print("Connecting to %s" % server,"port",port,"timeout",timeout)
-	import errno
-	from socket import error as socket_error
+    if timeout is None:
+        timeout = 30
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if callback is not None:
+        callback(server)
+    if timeout is not None:
+        sock.settimeout(timeout)
+    else:
+        raise ValueError("Invalid timeout")
+    #print("Connecting to %s" % server,"port",port,"timeout",timeout)
 
-	try:
-		sock.connect((server, port))
-		sock.send(("%s\r\n" % domain).encode("utf-8"))
-	except socket.timeout:
-		return ''
-	except socket_error as serr:
-    		if serr.errno != errno.ECONNREFUSED:
-        	# Not the error we are looking for, re-raise
-        		raise serr
-	buff = b""
-	while True:
-		if timeout is None:
-			data = sock.recv(1024)
-			if len(data) == 0:
-				break
-			buff += data
-		else:
-			import select
-			ready = select.select([sock], [], [], timeout)
-			if ready[0]:
-				data = sock.recv(1024)
-				if len(data) == 0:
-					break
-				buff += data
-			else:
-				raise Exception('recv timeout:%s' % server)
-	return buff.decode("utf-8", "replace")
+
+    try:
+        sock.connect((server, port))
+        sock.send(("%s\r\n" % domain).encode("utf-8"))
+    except socket.timeout:
+        return ''
+    except socket_error as serr:
+            if serr.errno != errno.ECONNREFUSED:
+            # Not the error we are looking for, re-raise
+                raise serr
+    buff = b""
+    while True:
+        if timeout is None:
+            data = sock.recv(1024)
+            if len(data) == 0:
+                break
+            buff += data
+        else:
+
+            ready = select.select([sock], [], [], timeout)
+            if ready[0]:
+                data = sock.recv(1024)
+                if len(data) == 0:
+                    break
+                buff += data
+            else:
+                raise shared.TimeoutException('recv timeout:%s' % server)
+    return buff.decode("utf-8", "replace")
